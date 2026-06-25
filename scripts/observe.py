@@ -46,6 +46,9 @@ def main():
     action_dim = env.action_space.shape[-1] if len(env.action_space.shape) > 0 else 0
     action = torch.zeros(args.num_envs, max(action_dim, 1), device="cuda:0")
 
+    action_dim = env.action_space.shape[-1] if len(env.action_space.shape) > 0 else 0
+    action = torch.zeros(args.num_envs, max(action_dim, 1), device="cuda:0")
+
     while simulation_app.is_running():
         try:
             env.step(action)

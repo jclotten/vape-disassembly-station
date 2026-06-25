@@ -43,13 +43,24 @@ RELEASE_DISTANCE = 0.08    # m — cap is fully free once pulled this far (8cm)
 
 # --- Front camera (Logitech C920) placement ---
 # Adjust these to match the real gooseneck mount position
-FRONT_CAM_POS = (0.5, -0.6, 0.6)   # in front of the workspace, slightly above table
-FRONT_CAM_ROT = (0.957, 0.290, 0.0, 0.0)  # ~34 deg pitch down, looking at the fixture
+FRONT_CAM_POS = (1.2, 0.0, 0.5)
+FRONT_CAM_ROT = (-0.4755, -0.5277, -0.5148, -0.4801)  # (x,y,z,w) from viewport Euler (84, -265, 5)
 
 # --- Wrist camera (RealSense D405) placement ---
 # Offset from panda_hand frame based on cammount CAD (~13cm along mount arm)
-WRIST_CAM_POS = (0.0, 0.0, 0.13)   # 13cm above the hand frame (along mount)
-WRIST_CAM_ROT = (0.0, 0.0, 0.0, 1.0)  # pointing straight down at the gripper
+# OffsetCfg.rot uses (x, y, z, w) quaternion order!
+WRIST_CAM_POS = (-0.11, -0.01, 0.03)
+WRIST_CAM_ROT = (-0.6455, -0.6738, 0.2681, 0.2397)
+
+# --- Finger-mounted Tip30 tooling ---
+# Tip30.obj is authored in the same CAD units as the vape parts. Scale 0.01 makes it ~2 cm long.
+# The OBJ's working point extends mostly along local -Z, so the rotations point it outward
+# along the Panda finger's local +Z fingertip direction. They also roll Tip30 so the slide
+# faces, not the undersides, point inward toward the opposing finger.
+TIP30_FINGER_POS = (0.0, 0.0, 0.046)
+TIP30_LEFT_FINGER_ROT = (1.0, 0.0, 0.0, 0.0)
+TIP30_RIGHT_FINGER_ROT = (0.0, 0.0, 0.0, 1.0)
+TIP30_SCALE = (0.01, 0.01, 0.01)
 
 
 # ============================================================
@@ -84,18 +95,40 @@ class DisassemblySceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    # the Franka Panda robot arm — mounted on top of the table
     robot = FRANKA_PANDA_HIGH_PD_CFG.replace(
         prim_path="{ENV_REGEX_NS}/Robot",
-        init_state=FRANKA_PANDA_HIGH_PD_CFG.init_state.replace(pos=[0.0, 0.0, 0.4]),
+        init_state=FRANKA_PANDA_HIGH_PD_CFG.init_state.replace(pos=[0.3, 0.0, 0.4]),
+    )
+
+    left_tip30 = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/panda_leftfinger/Tip30",
+        init_state=AssetBaseCfg.InitialStateCfg(pos=TIP30_FINGER_POS, rot=TIP30_LEFT_FINGER_ROT),
+        spawn=UsdFileCfg(
+            usd_path=os.path.join(ASSETS_DIR, "tip30.usd"),
+            scale=TIP30_SCALE,
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=RigidBodyMaterialCfg(static_friction=0.8, dynamic_friction=0.6),
+        ),
+    )
+
+    right_tip30 = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/panda_rightfinger/Tip30",
+        init_state=AssetBaseCfg.InitialStateCfg(pos=TIP30_FINGER_POS, rot=TIP30_RIGHT_FINGER_ROT),
+        spawn=UsdFileCfg(
+            usd_path=os.path.join(ASSETS_DIR, "tip30.usd"),
+            scale=TIP30_SCALE,
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=RigidBodyMaterialCfg(static_friction=0.8, dynamic_friction=0.6),
+        ),
     )
 
     # outer shell + mouthpiece — static, bolted to the world, never moves
     fixture = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Fixture",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0.5, 0.0, 0.45]),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0.5, -0.0775, 0.43674]),
         spawn=UsdFileCfg(
             usd_path=os.path.join(ASSETS_DIR, "fixture.usd"),
+            scale=(0.95, 0.95, 1.0),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             physics_material=RigidBodyMaterialCfg(
                 static_friction=0.8,
@@ -108,36 +141,21 @@ class DisassemblySceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/Robot/panda_hand/WristCamera",
         spawn=sim_utils.PinholeCameraCfg(
             focal_length=2.5,
-            horizontal_aperture=4.5,  # ~87 deg horizontal FOV (D405)
-            clipping_range=(0.07, 0.5),  # D405 range: 7-50cm
+            horizontal_aperture=4.5,
+            clipping_range=(0.07, 0.5),
         ),
-        offset=CameraCfg.OffsetCfg(
-            pos=WRIST_CAM_POS,
-            rot=WRIST_CAM_ROT,
-            convention="ros",
-        ),
-        width=84,
-        height=84,
-        update_period=1.0 / 30.0,
-        data_types=["rgb", "depth"],
+        offset=CameraCfg.OffsetCfg(pos=WRIST_CAM_POS, rot=WRIST_CAM_ROT, convention="opengl"),
+        width=84, height=84, update_period=1.0/30.0, data_types=["rgb", "depth"],
     )
-
     front_camera: CameraCfg = CameraCfg(
         prim_path="{ENV_REGEX_NS}/FrontCamera",
         spawn=sim_utils.PinholeCameraCfg(
             focal_length=3.0,
-            horizontal_aperture=4.3,  # ~71 deg horizontal FOV (C920: 78 deg diagonal)
+            horizontal_aperture=4.3,
             clipping_range=(0.05, 5.0),
         ),
-        offset=CameraCfg.OffsetCfg(
-            pos=FRONT_CAM_POS,
-            rot=FRONT_CAM_ROT,
-            convention="world",
-        ),
-        width=84,
-        height=84,
-        update_period=1.0 / 30.0,
-        data_types=["rgb"],
+        offset=CameraCfg.OffsetCfg(pos=FRONT_CAM_POS, rot=FRONT_CAM_ROT, convention="world"),
+        width=84, height=84, update_period=1.0/30.0, data_types=["rgb"],
     )
 
     # jig that holds the fixture — static, doesn't move (adjust pos later)
@@ -154,12 +172,12 @@ class DisassemblySceneCfg(InteractiveSceneCfg):
     # bottom cap — the part the robot pulls out. has physics (mass, collision, no gravity)
     workpiece: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Workpiece",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0.054, 0.45]),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, -0.02948, 0.5245]), # 0.5245]),  # TEMP: lifted +0.055 to test gravity
         spawn=UsdFileCfg(
             usd_path=os.path.join(ASSETS_DIR, "bottom_cap.usd"),
             scale=(0.0095, 0.01, 0.0095),    # slightly shrunk in X/Z to fit inside fixture
             rigid_props=RigidBodyPropertiesCfg(
-                disable_gravity=True,          # floats in place — spring holds it, not gravity
+                disable_gravity=True,         
                 max_depenetration_velocity=1.0, # limits how fast physics pushes overlapping objects apart
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
@@ -177,19 +195,17 @@ class DisassemblySceneCfg(InteractiveSceneCfg):
 # ============================================================
 @configclass
 class DisassemblyActionsCfg:
-    # move each of the 7 arm joints by a position offset
     arm_action: ActionTermCfg = mdp.JointPositionActionCfg(
         asset_name="robot",
         joint_names=["panda_joint.*"],
-        scale=0.5,                  # action=1 moves joint by 0.5 rad
-        use_default_offset=True,    # action=0 means "stay at default pose"
+        scale=0.5,
+        use_default_offset=True,
     )
-    # open or close the gripper (binary: 1=open, 0=close)
     gripper_action: ActionTermCfg = mdp.BinaryJointPositionActionCfg(
         asset_name="robot",
         joint_names=["panda_finger.*"],
-        open_command_expr={"panda_finger_.*": 0.04},   # fingers 4cm apart
-        close_command_expr={"panda_finger_.*": 0.0},   # fingers closed
+        open_command_expr={"panda_finger_.*": 0.04},
+        close_command_expr={"panda_finger_.*": 0.0},
     )
 
 
@@ -261,8 +277,8 @@ def _workpiece_extracted(env: object, threshold: float = 0.05) -> torch.Tensor:
 class DisassemblyObservationsCfg:
     @configclass
     class PolicyCfg(ObservationGroupCfg):
-        joint_pos = ObservationTermCfg(func=mdp.joint_pos_rel)       # current joint angles
-        joint_vel = ObservationTermCfg(func=mdp.joint_vel_rel)       # current joint speeds
+        joint_pos = ObservationTermCfg(func=mdp.joint_pos_rel)
+        joint_vel = ObservationTermCfg(func=mdp.joint_vel_rel)
         workpiece_pos = ObservationTermCfg(func=_workpiece_pos)      # where is the cap?
         workpiece_displacement = ObservationTermCfg(func=_workpiece_displacement)  # how far pulled?
         actions = ObservationTermCfg(func=mdp.last_action)           # what did agent do last step?
@@ -272,7 +288,7 @@ class DisassemblyObservationsCfg:
             self.concatenate_terms = True    # flatten everything into one vector
 
     policy: PolicyCfg = PolicyCfg()
-    image: ImageCfg = ImageCfg()
+    # image: ImageCfg = ImageCfg()  # TODO: define ImageCfg class first
 
 
 # ============================================================
@@ -297,9 +313,7 @@ class DisassemblyRewardsCfg:
         weight=50.0,
         params={"threshold": 0.05},
     )
-    # small penalty for large actions (encourages smooth motion)
     action_penalty = RewardTermCfg(func=mdp.action_l2, weight=-0.01)
-    # small penalty for fast joint motion (encourages gentle movement)
     joint_vel_penalty = RewardTermCfg(func=mdp.joint_vel_l2, weight=-0.001)
 
 
@@ -323,7 +337,6 @@ class DisassemblyTerminationsCfg:
 # ============================================================
 @configclass
 class DisassemblyEventsCfg:
-    # put robot joints back to default pose (1.0 = exact default, no randomness)
     reset_robot_joints = EventTermCfg(
         func=mdp.reset_joints_by_scale,
         mode="reset",
@@ -349,10 +362,26 @@ class DisassemblyEventsCfg:
 # ============================================================
 class DisassemblyEnv(ManagerBasedRLEnv):
 
+    def __init__(self, cfg, render_mode=None, **kwargs):
+        super().__init__(cfg, render_mode=render_mode, **kwargs)
+        self._disable_fixture_workpiece_collision()
+
+    def _disable_fixture_workpiece_collision(self):
+        """Tell PhysX: fixture and workpiece don't collide with each other."""
+        import omni.usd
+        from pxr import UsdPhysics
+        stage = omni.usd.get_context().get_stage()
+        # Add filtered collision pair on the physics scene
+        physics_scene = stage.GetPrimAtPath("/physicsScene")
+        if physics_scene.IsValid():
+            pair_api = UsdPhysics.FilteredPairsAPI.Apply(physics_scene)
+            pair_api.GetFilteredPairsRel().AddTarget("/World/envs/env_0/Fixture")
+            pair_api.GetFilteredPairsRel().AddTarget("/World/envs/env_0/Workpiece")
+
     def _pre_physics_step(self, actions):
         # actions = torch.zeros_like(actions)  # TEMP: uncomment to freeze robot
         super()._pre_physics_step(actions)
-        self._apply_hold_force()  # apply virtual spring every physics step
+        pass  # spring and robot both off — just let physics run
 
     def _apply_hold_force(self):
         """Simulates press-fit friction in 3 phases:
