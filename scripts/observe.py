@@ -43,10 +43,14 @@ def main():
     print("[INFO] Environment loaded. Use the viewport to inspect the scene.")
     print("[INFO] Close the window or press Ctrl+C to exit.")
 
-    action = torch.zeros(args.num_envs, env.action_space.shape[-1], device="cuda:0")
+    action_dim = env.action_space.shape[-1] if len(env.action_space.shape) > 0 else 0
+    action = torch.zeros(args.num_envs, max(action_dim, 1), device="cuda:0")
 
     while simulation_app.is_running():
-        env.step(action)
+        try:
+            env.step(action)
+        except Exception:
+            simulation_app.update()
 
     env.close()
     simulation_app.close()
