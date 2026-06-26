@@ -176,7 +176,7 @@ class FrankaPickAndPlaceEnvCfg(ManagerBasedRLEnvCfg):
 
     sim: SimulationCfg = SimulationCfg(dt=1.0 / 120.0)
     episode_length_s = 8.0
-    decimation = 2
+    decimation = 4
 
     def __post_init__(self):
         super().__post_init__()

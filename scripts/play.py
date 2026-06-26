@@ -67,7 +67,8 @@ def main():
     while simulation_app.is_running():
         with torch.inference_mode():
             actions = policy(obs)
-        obs, _, _, _, _ = env.step(actions)
+        step_result = env.step(actions)
+        obs = step_result[0]
 
     env.close()
     simulation_app.close()

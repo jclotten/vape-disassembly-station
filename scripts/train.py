@@ -21,9 +21,14 @@ parser.add_argument("--seed", type=int, default=42, help="Random seed")
 parser.add_argument("--max_iterations", type=int, default=None, help="Override max training iterations")
 parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume from")
 parser.add_argument("--log_dir", type=str, default="logs", help="Root log directory")
+parser.add_argument("--video", action="store_true", default=False, help="Record rgb_array videos during training")
+parser.add_argument("--video_length", type=int, default=200, help="Length of each recorded video in env steps")
+parser.add_argument("--video_interval", type=int, default=2000, help="Interval between video recordings in env steps")
 
 AppLauncher.add_app_launcher_args(parser)
 args = parser.parse_args()
+if args.video:
+    args.enable_cameras = True
 app_launcher = AppLauncher(args)
 simulation_app = app_launcher.app
 
@@ -87,7 +92,17 @@ def main():
 
     print(f"[INFO] Logging experiment in directory: {log_dir}")
 
-    env = gym.make(args.task, cfg=env_cfg)
+    env = gym.make(args.task, cfg=env_cfg, render_mode="rgb_array" if args.video else None)
+    if args.video:
+        video_folder = os.path.join(log_dir, "videos", "train")
+        print(f"[INFO] Recording training videos in: {video_folder}")
+        env = gym.wrappers.RecordVideo(
+            env,
+            video_folder=video_folder,
+            step_trigger=lambda step: step % args.video_interval == 0,
+            video_length=args.video_length,
+            disable_logger=True,
+        )
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
     runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
